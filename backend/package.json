@@ -1,0 +1,25 @@
+{
+  "name": "jansetu-backend",
+  "version": "1.0.0",
+  "description": "JanSetu - Citizen Demand Aggregation Platform Backend API",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "jansetu",
+    "express",
+    "mongodb",
+    "civic-tech"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mongoose": "^9.9.5"
+  }
+}
