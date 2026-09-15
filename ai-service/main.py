@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from classify import classify_complaint
+from pipeline import process_complaint
 
 app = FastAPI()
 
@@ -9,5 +9,4 @@ class ComplaintInput(BaseModel):
 
 @app.post("/process-complaint")
 def process(complaint: ComplaintInput):
-    category = classify_complaint(complaint.text)
-    return {"category": category}
+    return process_complaint(complaint.text)
