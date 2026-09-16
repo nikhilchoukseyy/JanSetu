@@ -1,18 +1,18 @@
-import { GoogleGenAI, Type } from '@google/genai';
-
 /**
  * Custom error class for AI Service operations
  */
 export class AiServiceError extends Error {
   /**
    * @param {string} message - Human-readable error message
-   * @param {string} code - Machine-readable error code (e.g. MISSING_API_KEY, INVALID_INPUT, GEMINI_API_ERROR, PARSE_ERROR)
+   * @param {string} code - Machine-readable error code (e.g. INVALID_INPUT, MISSING_CONFIG, NETWORK_ERROR, HTTP_ERROR, PARSE_ERROR, TIMEOUT_ERROR)
+   * @param {number} [statusCode=500] - Associated HTTP status code
    * @param {Error|null} [originalError=null] - Upstream or underlying error if applicable
    */
-  constructor(message, code = 'AI_SERVICE_ERROR', originalError = null) {
+  constructor(message, code = 'AI_SERVICE_ERROR', statusCode = 500, originalError = null) {
     super(message);
     this.name = 'AiServiceError';
     this.code = code;
+    this.statusCode = statusCode;
     this.originalError = originalError;
   }
 }
@@ -31,178 +31,175 @@ export const COMPLAINT_CATEGORIES = [
 ];
 
 /**
- * Default Gemini model if not specified in environment
+ * Default AI service base URL
  */
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_AI_SERVICE_URL = 'http://localhost:8000';
 
 /**
- * Response schema for structured output from Gemini
+ * Default timeout for AI HTTP requests (in milliseconds)
  */
-export const COMPLAINT_ANALYSIS_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    language: {
-      type: Type.STRING,
-      description: 'The detected language of the original text (e.g. Hindi, English, Marathi, Bengali, Hinglish, etc.)',
-    },
-    translatedText: {
-      type: Type.STRING,
-      description: 'The translated complaint text in clear, standard English. If original text is already in English, provide clean English text.',
-    },
-    category: {
-      type: Type.STRING,
-      description: `The single best-matching category for this complaint. Must be one of: ${COMPLAINT_CATEGORIES.join(', ')}`,
-    },
-    summary: {
-      type: Type.STRING,
-      description: 'A concise one-sentence summary of the core civic demand or issue in English.',
-    },
-  },
-  required: ['language', 'translatedText', 'category', 'summary'],
-};
+export const DEFAULT_AI_TIMEOUT_MS = 10000;
 
 /**
- * System instruction defining the AI engine role, taxonomy, and output specifications
- */
-const SYSTEM_INSTRUCTION = `You are JanSetu's AI civic intelligence engine. Your role is to analyze citizen complaints and demand submissions in any Indian or international language/dialect.
-For each complaint:
-1. Detect the original language (e.g., Hindi, Marathi, Tamil, Bengali, Telugu, Hinglish, English, etc.).
-2. Translate the complaint into clear, grammatically correct English while preserving the original meaning, urgency, and specific entities (ward numbers, street names, landmarks).
-3. Classify the complaint into exactly ONE of the following categories:
-   - Water Supply
-   - Roads & Infrastructure
-   - Sanitation & Waste Management
-   - Electricity & Power
-   - Public Health
-   - Public Transport
-   - Other
-4. Provide a concise, clear one-sentence summary of the core issue in English.
-
-Always output valid JSON conforming strictly to the requested schema.`;
-
-/**
- * Helper to obtain an authenticated GoogleGenAI instance.
- * Reads API key from options override or process.env.GEMINI_API_KEY.
+ * Maps and normalizes raw FastAPI response into standard JanSetu camelCase contract
  *
- * @param {string|null} [customApiKey=null] - Optional API key override
- * @returns {GoogleGenAI}
- * @throws {AiServiceError} If API key is missing or blank
- */
-export const getGeminiClient = (customApiKey = null) => {
-  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
-  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-    throw new AiServiceError(
-      'GEMINI_API_KEY environment variable is missing or empty. Please set GEMINI_API_KEY in your environment or .env file.',
-      'MISSING_API_KEY'
-    );
-  }
-  return new GoogleGenAI({ apiKey: apiKey.trim() });
-};
-
-/**
- * Helper to parse, sanitize, and validate structured AI response JSON
- *
- * @param {string} rawText - Raw text returned from Gemini model
+ * @param {object} data - Raw JSON response from FastAPI microservice
  * @returns {{ language: string, translatedText: string, category: string, summary: string }}
- * @throws {AiServiceError} If JSON cannot be parsed or required fields are invalid
+ * @throws {AiServiceError} If response is malformed or missing required content
  */
-export const parseAndValidateAiResponse = (rawText) => {
-  if (!rawText || typeof rawText !== 'string') {
-    throw new AiServiceError('AI returned an empty or invalid response payload', 'PARSE_ERROR');
+export const formatFastApiResponse = (data) => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new AiServiceError('Invalid response payload from AI microservice', 'PARSE_ERROR', 502);
   }
 
-  let cleaned = rawText.trim();
-  // Strip markdown code fences if model enclosed JSON in them
-  if (cleaned.startsWith('```json')) {
-    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-  } else if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  // Support both snake_case (FastAPI) and camelCase properties
+  const rawLanguage = data.detected_language || data.language || data.detectedLanguage;
+  const rawTranslatedText = data.translated_text || data.translatedText || data.text;
+  const rawCategory = data.category;
+  const rawSummary = data.summary || data.summary_text || data.summaryText || rawTranslatedText;
+
+  if (!rawLanguage || typeof rawLanguage !== 'string') {
+    throw new AiServiceError('AI service response missing language field', 'PARSE_ERROR', 502);
   }
 
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned.trim());
-  } catch (err) {
-    throw new AiServiceError(`Failed to parse AI response as valid JSON: ${err.message}`, 'PARSE_ERROR', err);
+  if (!rawTranslatedText || typeof rawTranslatedText !== 'string') {
+    throw new AiServiceError('AI service response missing translatedText field', 'PARSE_ERROR', 502);
   }
 
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new AiServiceError('AI response is not a valid JSON object', 'PARSE_ERROR');
-  }
-
-  // Validate required contract fields
-  const requiredFields = ['language', 'translatedText', 'category', 'summary'];
-  for (const field of requiredFields) {
-    if (parsed[field] === undefined || parsed[field] === null || typeof parsed[field] !== 'string') {
-      throw new AiServiceError(`AI response missing or invalid string field: '${field}'`, 'PARSE_ERROR');
-    }
-    parsed[field] = parsed[field].trim();
+  if (!rawCategory || typeof rawCategory !== 'string') {
+    throw new AiServiceError('AI service response missing category field', 'PARSE_ERROR', 502);
   }
 
   // Normalize category against defined taxonomy
-  if (!COMPLAINT_CATEGORIES.includes(parsed.category)) {
-    const matchedCategory = COMPLAINT_CATEGORIES.find(
-      (cat) => cat.toLowerCase() === parsed.category.toLowerCase()
+  const categoryTrimmed = rawCategory.trim();
+  let matchedCategory = COMPLAINT_CATEGORIES.find(
+    (cat) => cat.toLowerCase() === categoryTrimmed.toLowerCase()
+  );
+
+  // Partial match fallback for variations like "water" -> "Water Supply"
+  if (!matchedCategory) {
+    matchedCategory = COMPLAINT_CATEGORIES.find((cat) =>
+      cat.toLowerCase().includes(categoryTrimmed.toLowerCase()) ||
+      categoryTrimmed.toLowerCase().includes(cat.toLowerCase())
     );
-    parsed.category = matchedCategory || 'Other';
   }
 
   return {
-    language: parsed.language,
-    translatedText: parsed.translatedText,
-    category: parsed.category,
-    summary: parsed.summary,
+    language: rawLanguage.trim(),
+    translatedText: rawTranslatedText.trim(),
+    category: matchedCategory || 'Other',
+    summary: (typeof rawSummary === 'string' && rawSummary.trim().length > 0)
+      ? rawSummary.trim()
+      : rawTranslatedText.trim(),
   };
 };
 
 /**
- * Analyzes citizen complaint text using Gemini.
- * Independent service function — pure AI abstraction without direct database access.
+ * Analyzes citizen complaint text by delegating to the FastAPI AI microservice.
+ * Acts as a decoupled HTTP adapter / client.
  *
  * @param {string} text - Raw complaint text submitted by citizen
- * @param {object} [options={}] - Optional configuration options
- * @param {string} [options.apiKey] - Optional API key override
- * @param {string} [options.model] - Optional model override (defaults to process.env.GEMINI_MODEL or 'gemini-2.5-flash')
+ * @param {object} [options={}] - Configuration options
+ * @param {string} [options.aiServiceUrl] - Override base URL for AI service
+ * @param {string} [options.language] - Optional source language hint
+ * @param {number} [options.timeout] - Request timeout in milliseconds (default: 10000ms)
  * @returns {Promise<{ language: string, translatedText: string, category: string, summary: string }>}
  * @throws {AiServiceError}
  */
 export const analyzeComplaintText = async (text, options = {}) => {
-  // 1. Input validation
+  // 1. Validate Input
   if (text === undefined || text === null || typeof text !== 'string') {
-    throw new AiServiceError('Complaint text must be a valid non-empty string.', 'INVALID_INPUT');
+    throw new AiServiceError('Complaint text must be a valid non-empty string.', 'INVALID_INPUT', 400);
   }
 
   const trimmedText = text.trim();
   if (trimmedText.length === 0) {
-    throw new AiServiceError('Complaint text cannot be empty or only whitespace.', 'INVALID_INPUT');
+    throw new AiServiceError('Complaint text cannot be empty or only whitespace.', 'INVALID_INPUT', 400);
   }
 
-  // 2. Initialize Gemini Client
-  const client = getGeminiClient(options.apiKey);
-  const modelName = options.model || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+  // 2. Resolve AI service endpoint
+  const baseUrl = options.aiServiceUrl || process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL;
+  if (!baseUrl || typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
+    throw new AiServiceError(
+      'AI_SERVICE_URL configuration is missing. Please configure AI_SERVICE_URL in your environment.',
+      'MISSING_CONFIG',
+      500
+    );
+  }
 
-  // 3. Call Gemini API
+  const endpoint = `${baseUrl.trim().replace(/\/+$/, '')}/process-complaint`;
+  const timeoutMs = options.timeout || DEFAULT_AI_TIMEOUT_MS;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  const requestBody = {
+    text: trimmedText,
+    ...(options.language && typeof options.language === 'string' && { language: options.language.trim() }),
+  };
+
   try {
-    const response = await client.models.generateContent({
-      model: modelName,
-      contents: `Please analyze the following citizen complaint:\n"""\n${trimmedText}\n"""`,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: 'application/json',
-        responseSchema: COMPLAINT_ANALYSIS_SCHEMA,
-        temperature: 0.2,
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
     });
 
-    const responseText = response.text;
-    return parseAndValidateAiResponse(responseText);
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      let errorDetail = response.statusText;
+      try {
+        const errorJson = await response.json();
+        errorDetail = errorJson.detail || errorJson.message || JSON.stringify(errorJson);
+      } catch {
+        // Response was not JSON
+      }
+
+      throw new AiServiceError(
+        `AI microservice returned HTTP ${response.status}: ${errorDetail}`,
+        'HTTP_ERROR',
+        response.status
+      );
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      throw new AiServiceError(
+        `Failed to parse response from AI microservice as JSON: ${parseErr.message}`,
+        'PARSE_ERROR',
+        502,
+        parseErr
+      );
+    }
+
+    return formatFastApiResponse(data);
   } catch (error) {
+    clearTimeout(timeoutId);
+
     if (error instanceof AiServiceError) {
       throw error;
     }
+
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new AiServiceError(
+        `AI microservice request timed out after ${timeoutMs}ms`,
+        'TIMEOUT_ERROR',
+        504,
+        error
+      );
+    }
+
     throw new AiServiceError(
-      `Gemini API request failed: ${error.message || 'Unknown error'}`,
-      'GEMINI_API_ERROR',
+      `Failed to communicate with AI microservice at ${endpoint}: ${error.message || 'Connection failed'}`,
+      'NETWORK_ERROR',
+      503,
       error
     );
   }

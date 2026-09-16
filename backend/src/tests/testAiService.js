@@ -1,17 +1,15 @@
+import http from 'http';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 // Load .env
 dotenv.config();
 
 import {
   analyzeComplaintText,
-  getGeminiClient,
-  parseAndValidateAiResponse,
+  formatFastApiResponse,
   AiServiceError,
   COMPLAINT_CATEGORIES,
-  DEFAULT_GEMINI_MODEL,
+  DEFAULT_AI_SERVICE_URL,
 } from '../services/aiService.js';
 
 let totalTests = 0;
@@ -29,13 +27,29 @@ const assert = (condition, testName, details = '') => {
   }
 };
 
+/**
+ * Helper to spin up a lightweight mock HTTP server for testing adapter interactions
+ */
+const createMockServer = (handler) => {
+  return new Promise((resolve) => {
+    const server = http.createServer(handler);
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      resolve({
+        url: `http://127.0.0.1:${port}`,
+        close: () => new Promise((res) => server.close(res)),
+      });
+    });
+  });
+};
+
 const runTests = async () => {
   console.log('\n======================================================');
-  console.log('🧪 JANSETU BACKEND - SESSION 2 CHECKPOINT 1 TEST SUITE');
+  console.log('🧪 JANSETU BACKEND - FASTAPI AI ADAPTER TEST SUITE');
   console.log('======================================================\n');
 
-  // TEST SUITE 1: Input Validation & Defensive Guardrails
-  console.log('📦 Test Suite 1: Input Validation & Edge Cases');
+  // TEST SUITE 1: Input Validation
+  console.log('📦 Test Suite 1: Input Validation & Defensive Guardrails');
   {
     // Empty string
     try {
@@ -61,146 +75,190 @@ const runTests = async () => {
       assert(err instanceof AiServiceError && err.code === 'INVALID_INPUT', 'Rejects null input with INVALID_INPUT');
     }
 
-    // Non-string input (number/object)
+    // Non-string input
     try {
-      await analyzeComplaintText(12345);
+      await analyzeComplaintText(98765);
       assert(false, 'Should reject numeric input');
     } catch (err) {
       assert(err instanceof AiServiceError && err.code === 'INVALID_INPUT', 'Rejects numeric input with INVALID_INPUT');
     }
   }
 
-  // TEST SUITE 2: API Key Configuration & Handling
-  console.log('\n🔑 Test Suite 2: API Key Handling & Initialization');
+  // TEST SUITE 2: FastAPI snake_case to camelCase Mapping & Taxonomy
+  console.log('\n📐 Test Suite 2: Response Mapping & Taxonomy Normalization');
   {
-    // Explicitly missing API key
-    const originalKey = process.env.GEMINI_API_KEY;
-    try {
-      delete process.env.GEMINI_API_KEY;
-      getGeminiClient(null);
-      assert(false, 'Should throw when GEMINI_API_KEY is unset');
-    } catch (err) {
-      assert(err instanceof AiServiceError && err.code === 'MISSING_API_KEY', 'Throws MISSING_API_KEY when key is missing');
-    } finally {
-      if (originalKey) {
-        process.env.GEMINI_API_KEY = originalKey;
-      }
-    }
-
-    // Explicitly empty API key override
-    try {
-      getGeminiClient('   ');
-      assert(false, 'Should throw when custom API key is blank whitespace');
-    } catch (err) {
-      assert(err instanceof AiServiceError && err.code === 'MISSING_API_KEY', 'Throws MISSING_API_KEY when custom key is blank');
-    }
-
-    // Valid dummy API key initialization
-    try {
-      const dummyClient = getGeminiClient('dummy_test_key_123');
-      assert(Boolean(dummyClient), 'Successfully instantiates GoogleGenAI client with provided key');
-    } catch (err) {
-      assert(false, 'Failed to instantiate GoogleGenAI client with key', err.message);
-    }
-  }
-
-  // TEST SUITE 3: Structured AI Response Parser & Taxonomy Validation
-  console.log('\n📐 Test Suite 3: Structured Response Parsing & Taxonomy');
-  {
-    // Valid standard JSON
-    const validJson = JSON.stringify({
-      language: 'Hindi',
-      translatedText: 'Potholes on Station Road causing accidents.',
-      category: 'Roads & Infrastructure',
-      summary: 'Hazardous potholes on Station Road causing accidents.',
-    });
+    // Standard FastAPI snake_case response
+    const mockFastApiResponse = {
+      detected_language: 'Hindi',
+      translated_text: 'There has been no water supply in Ward 12 for 3 days.',
+      category: 'Water Supply',
+      summary: 'No water supply in Ward 12 for 3 days.',
+    };
 
     try {
-      const parsed = parseAndValidateAiResponse(validJson);
+      const mapped = formatFastApiResponse(mockFastApiResponse);
       assert(
-        parsed.language === 'Hindi' &&
-          parsed.translatedText === 'Potholes on Station Road causing accidents.' &&
-          parsed.category === 'Roads & Infrastructure' &&
-          parsed.summary === 'Hazardous potholes on Station Road causing accidents.',
-        'Correctly parses valid JSON response matching schema'
+        mapped.language === 'Hindi' &&
+          mapped.translatedText === 'There has been no water supply in Ward 12 for 3 days.' &&
+          mapped.category === 'Water Supply' &&
+          mapped.summary === 'No water supply in Ward 12 for 3 days.',
+        'Maps snake_case FastAPI response to camelCase contract'
       );
     } catch (err) {
-      assert(false, 'Failed on valid JSON parsing', err.message);
+      assert(false, 'Failed snake_case mapping', err.message);
     }
 
-    // JSON wrapped in Markdown code blocks (```json ... ```)
-    const markdownWrappedJson = `\`\`\`json\n${validJson}\n\`\`\``;
-    try {
-      const parsed = parseAndValidateAiResponse(markdownWrappedJson);
-      assert(parsed.language === 'Hindi', 'Handles markdown code fences (```json ... ```) transparently');
-    } catch (err) {
-      assert(false, 'Failed on markdown wrapped JSON', err.message);
-    }
-
-    // Missing required field
-    const incompleteJson = JSON.stringify({
-      language: 'Hindi',
-      translatedText: 'Potholes on Station Road.',
-      // category missing
+    // Case-insensitive taxonomy matching
+    const lowerCaseCategory = {
+      detected_language: 'Marathi',
+      translated_text: 'Potholes on main road.',
+      category: 'roads & infrastructure',
       summary: 'Potholes on road.',
-    });
-
+    };
     try {
-      parseAndValidateAiResponse(incompleteJson);
-      assert(false, 'Should throw error when required field is missing');
+      const mapped = formatFastApiResponse(lowerCaseCategory);
+      assert(mapped.category === 'Roads & Infrastructure', 'Normalizes lowercase category to standard taxonomy casing');
     } catch (err) {
-      assert(err instanceof AiServiceError && err.code === 'PARSE_ERROR', 'Rejects payload with missing field with PARSE_ERROR');
+      assert(false, 'Failed case-insensitive taxonomy mapping', err.message);
     }
 
-    // Malformed JSON string
+    // Partial category matching (e.g. "water" -> "Water Supply")
+    const partialCategory = {
+      detected_language: 'Bengali',
+      translated_text: 'Water pipe leaked.',
+      category: 'water',
+      summary: 'Leaked water pipe.',
+    };
     try {
-      parseAndValidateAiResponse('Invalid non-json text string');
-      assert(false, 'Should throw error on non-JSON payload');
+      const mapped = formatFastApiResponse(partialCategory);
+      assert(mapped.category === 'Water Supply', 'Normalizes partial category ("water") to "Water Supply"');
     } catch (err) {
-      assert(err instanceof AiServiceError && err.code === 'PARSE_ERROR', 'Rejects non-JSON payload with PARSE_ERROR');
+      assert(false, 'Failed partial category mapping', err.message);
     }
 
-    // Taxonomy normalization: unrecognized category maps to "Other"
-    const unlistedCategoryJson = JSON.stringify({
-      language: 'English',
-      translatedText: 'Parks need more benches.',
-      category: 'Gardening & Recreation',
-      summary: 'Request for more benches in local parks.',
-    });
-
+    // Unrecognized category fallback to "Other"
+    const unknownCategory = {
+      detected_language: 'Tamil',
+      translated_text: 'Noise in playground.',
+      category: 'Parks & Entertainment',
+      summary: 'Noise issue in playground.',
+    };
     try {
-      const parsed = parseAndValidateAiResponse(unlistedCategoryJson);
-      assert(parsed.category === 'Other', 'Normalizes unlisted category to "Other" fallback');
+      const mapped = formatFastApiResponse(unknownCategory);
+      assert(mapped.category === 'Other', 'Falls back to "Other" for unmapped category');
     } catch (err) {
-      assert(false, 'Failed category normalization test', err.message);
+      assert(false, 'Failed unknown category fallback', err.message);
+    }
+
+    // Missing field validation
+    try {
+      formatFastApiResponse({ detected_language: 'Hindi' });
+      assert(false, 'Should throw error when translated_text and category are missing');
+    } catch (err) {
+      assert(err instanceof AiServiceError && err.code === 'PARSE_ERROR', 'Throws PARSE_ERROR for missing required fields');
     }
   }
 
-  // TEST SUITE 4: Live Gemini API Call (if GEMINI_API_KEY is configured)
-  console.log('\n🌐 Test Suite 4: Live Gemini Integration Test');
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (apiKey && apiKey !== 'your_gemini_api_key_here' && apiKey.trim().length > 0) {
-    try {
-      console.log(`  ℹ️ Live GEMINI_API_KEY detected. Testing live call with model: ${process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL}...`);
-      const sampleText = 'हमारे वार्ड 12 में पिछले 4 दिनों से गंदा और बदबूदार पानी आ रहा है, कृपया इसे जल्द ठीक कराएं।';
-      const result = await analyzeComplaintText(sampleText);
-      console.log('  Live Analysis Output:', JSON.stringify(result, null, 2));
+  // TEST SUITE 3: HTTP Adapter & Mock Server Integration
+  console.log('\n🌐 Test Suite 3: HTTP Adapter & Mock Server Integration');
+  {
+    // 3.1 Successful 200 response from FastAPI mock server
+    const successMockServer = await createMockServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/process-complaint') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              original_text: parsed.text,
+              detected_language: 'Hindi',
+              translated_text: 'Garbage not collected for a week near market.',
+              category: 'Sanitation & Waste Management',
+              summary: 'Garbage accumulation near market for a week.',
+            })
+          );
+        });
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
 
-      assert(typeof result.language === 'string' && result.language.length > 0, 'Live call returned detected language');
-      assert(typeof result.translatedText === 'string' && result.translatedText.length > 0, 'Live call returned translated English text');
-      assert(COMPLAINT_CATEGORIES.includes(result.category), `Live call returned recognized taxonomy category (${result.category})`);
-      assert(typeof result.summary === 'string' && result.summary.length > 0, 'Live call returned summary');
+    try {
+      const result = await analyzeComplaintText('बाजार के पास एक हफ्ते से कचरा नहीं उठाया गया है', {
+        aiServiceUrl: successMockServer.url,
+      });
+      assert(
+        result.language === 'Hindi' &&
+          result.translatedText === 'Garbage not collected for a week near market.' &&
+          result.category === 'Sanitation & Waste Management',
+        'Successfully calls mock FastAPI /process-complaint and parses output'
+      );
     } catch (err) {
-      console.error('  ⚠️ Live Gemini Call Note:', err.message);
-      assert(false, 'Live Gemini Call execution', err.message);
+      assert(false, 'Mock server call failed', err.message);
+    } finally {
+      await successMockServer.close();
     }
-  } else {
-    console.log('  ℹ️ GEMINI_API_KEY not configured or is placeholder in .env. Live network call skipped safely.');
-    assert(true, 'Live call skipped safely without error (API key placeholder)');
+
+    // 3.2 FastAPI returns 500 error
+    const error500MockServer = await createMockServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ detail: 'Internal model inference error' }));
+    });
+
+    try {
+      await analyzeComplaintText('Complaint text', {
+        aiServiceUrl: error500MockServer.url,
+      });
+      assert(false, 'Should throw on HTTP 500 error');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'HTTP_ERROR' && err.statusCode === 500,
+        'Handles HTTP 500 with structured HTTP_ERROR code and status'
+      );
+    } finally {
+      await error500MockServer.close();
+    }
+
+    // 3.3 Connection failure (unreachable port)
+    try {
+      await analyzeComplaintText('Some text', {
+        aiServiceUrl: 'http://127.0.0.1:59999', // Non-existent port
+        timeout: 1000,
+      });
+      assert(false, 'Should throw on unreachable network endpoint');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'NETWORK_ERROR',
+        'Handles network connection failure with NETWORK_ERROR code'
+      );
+    }
+
+    // 3.4 Request Timeout
+    const slowMockServer = await createMockServer((req, res) => {
+      // Deliberately do not respond to trigger client timeout
+    });
+
+    try {
+      await analyzeComplaintText('Some text', {
+        aiServiceUrl: slowMockServer.url,
+        timeout: 200, // 200ms timeout
+      });
+      assert(false, 'Should throw on timeout');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'TIMEOUT_ERROR',
+        'Handles request timeout with TIMEOUT_ERROR code'
+      );
+    } finally {
+      await slowMockServer.close();
+    }
   }
 
-  // TEST SUITE 5: Regression & Express App Integrity
-  console.log('\n🛡️ Test Suite 5: Express App & Routing Regression');
+  // TEST SUITE 4: Regression & Express App Integrity
+  console.log('\n🛡️ Test Suite 4: Express App & Routing Regression');
   try {
     const { default: app } = await import('../app.js');
     assert(Boolean(app && typeof app.use === 'function'), 'Express app imports cleanly without module resolution errors');
