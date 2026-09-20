@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-ivory: #FAF7F0;
+    --bg-card: #FFFFFF;
+    --bg-card-subtle: #F6F2E9;
+    --border-warm: #E6E0D2;
+    --border-light: #ECE7DC;
+    --ink-primary: #141916;
+    --ink-secondary: #515A54;
+    --ink-tertiary: #838E86;
+    --ink-muted: #A1AAA3;
+    --jansetu-green: #00684A;
+    --jansetu-green-dark: #004D36;
+    --jansetu-green-light: #E7F3ED;
+    --jansetu-green-border: #A3D4BF;
+    --terracotta: #C65D47;
+    --terracotta-light: #FBEFEA;
+    --warm-ochre: #CB8A24;
+    --warm-ochre-light: #FEF7E8;
+    --sage: #5B7566;
+    --sage-light: #EFF3F0;
+    
+    --font-serif: 'Fraunces', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-ivory);
+    color: var(--ink-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Editorial Paper Background with Fine Subtle Grid */
+  body {
+    background-color: #FAF7F0;
+    background-image: 
+      radial-gradient(rgba(20, 25, 22, 0.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, .font-editorial {
+    font-family: var(--font-serif);
+    font-feature-settings: "liga" 1, "kern" 1;
+  }
+
+  .font-mono-data {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F3EEE4;
+}
+::-webkit-scrollbar-thumb {
+  background: #D5CEBE;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B6AE9E;
+}
+
+/* Editorial Paper Card Utility */
+.editorial-card {
+  background: #FFFFFF;
+  border: 1px solid var(--border-warm);
+  box-shadow: 0 1px 3px 0 rgba(20, 25, 22, 0.03), 0 1px 2px -1px rgba(20, 25, 22, 0.03);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.editorial-card:hover {
+  border-color: #D8D1C2;
+  box-shadow: 0 6px 18px -4px rgba(20, 25, 22, 0.06), 0 2px 6px -2px rgba(20, 25, 22, 0.03);
+}
+
+/* Leaflet Customization for Editorial Civic Map */
+.leaflet-container {
+  font-family: var(--font-sans) !important;
+  background-color: #FAF7F0 !important;
+  z-index: 10;
+}
+
+.leaflet-tile {
+  filter: saturate(0.68) sepia(0.12) contrast(0.96) brightness(1.02);
+}
+
+.leaflet-popup-content-wrapper {
+  background: #FFFFFF !important;
+  color: #141916 !important;
+  border-radius: 8px !important;
+  border: 1px solid #E2DCD0 !important;
+  box-shadow: 0 12px 28px -6px rgba(20, 25, 22, 0.16), 0 4px 10px -2px rgba(20, 25, 22, 0.08) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1.45 !important;
+  min-width: 240px;
+}
+
+.leaflet-popup-tip {
+  background: #FFFFFF !important;
+  border: 1px solid #E2DCD0 !important;
+}
+
+/* Pulsing Hotspot Marker Animation */
+@keyframes jansetu-pulse-ring {
+  0% {
+    transform: scale(0.65);
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.pulse-ring-element {
+  animation: jansetu-pulse-ring 2.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  transform-origin: center center;
+}
+
+/* Subtle Shimmer for High Priority Alert */
+@keyframes subtle-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-bg {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: subtle-shimmer 4s infinite ease-in-out;
+}
+
+/* Data Fusion Pipeline Connecting Flow */
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.flow-active-line {
+  stroke-dasharray: 6 6;
+  animation: flow-dash 1.2s linear infinite;
+}
