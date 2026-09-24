@@ -3,6 +3,7 @@ import cors from 'cors';
 import healthRoutes from './routes/healthRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 // API Routes
 app.use('/api/health', healthRoutes);
 app.use('/api/complaints', complaintRoutes);
+app.use('/api/auth', authRoutes);
 
 // Catch 404 and forward to error handler
 app.use(notFound);
