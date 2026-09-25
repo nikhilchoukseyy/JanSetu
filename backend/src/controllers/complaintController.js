@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Complaint from '../models/Complaint.js';
+import { processComplaint } from '../services/complaintProcessingService.js';
 
 const ALLOWED_STATUSES = ['received', 'processing', 'processed', 'failed'];
 
@@ -190,6 +191,35 @@ export const getComplaintById = async (req, res, next) => {
       success: true,
       data: complaint,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @route   POST /api/complaints/:id/process
+ * @desc    Explicitly trigger AI processing for a citizen complaint
+ * @access  Public
+ */
+export const processComplaintById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await processComplaint(id);
+
+    const responsePayload = {
+      success: result.success,
+      code: result.code,
+      message: result.message,
+    };
+
+    if (result.data) {
+      const dataObj = result.data.toObject ? result.data.toObject() : { ...result.data };
+      delete dataObj.__v;
+      responsePayload.data = dataObj;
+    }
+
+    return res.status(result.statusCode).json(responsePayload);
   } catch (error) {
     next(error);
   }

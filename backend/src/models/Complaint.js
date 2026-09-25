@@ -76,6 +76,11 @@ const complaintSchema = new mongoose.Schema(
       trim: true,
       default: null, // Category taxonomy will be defined during AI integration
     },
+    summary: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     clusterId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Cluster',

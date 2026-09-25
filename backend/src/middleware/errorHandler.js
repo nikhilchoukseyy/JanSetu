@@ -11,7 +11,23 @@ export const notFound = (req, res, next) => {
  * Centralized error handling middleware
  */
 export const errorHandler = (err, req, res, next) => {
-  const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
+  // Handle JSON syntax error / body parser errors
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      message: 'Malformed JSON payload in request body',
+    });
+  }
+
+  // Handle payload too large
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({
+      success: false,
+      message: 'Payload too large',
+    });
+  }
+
+  const statusCode = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
 
   res.status(statusCode).json({
     success: false,
