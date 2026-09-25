@@ -2,8 +2,19 @@ import mongoose from 'mongoose';
 import Complaint from '../models/Complaint.js';
 import { processComplaint } from '../services/complaintProcessingService.js';
 import { serializeComplaint, serializeComplaints } from '../serializers/complaintSerializer.js';
+import { COMPLAINT_CATEGORIES } from '../services/aiService.js';
 
 const ALLOWED_STATUSES = ['received', 'processing', 'processed', 'failed'];
+
+/**
+ * Maps dashboard category filter aliases to backend canonical categories.
+ */
+const CATEGORY_ALIASES = {
+  water: 'Water Supply',
+  roads: 'Roads & Infrastructure',
+  sanitation: 'Sanitation & Waste Management',
+  electricity: 'Electricity & Power',
+};
 
 /**
  * @route   POST /api/complaints
@@ -104,8 +115,8 @@ export const getComplaints = async (req, res, next) => {
 
     const page = !isNaN(rawPage) && rawPage > 0 ? rawPage : 1;
     let limit = !isNaN(rawLimit) && rawLimit > 0 ? rawLimit : 10;
-    if (limit > 100) {
-      limit = 100; // Cap limit to prevent excessive resource consumption
+    if (limit > 1000) {
+      limit = 1000; // Cap limit to prevent excessive resource consumption
     }
 
     const filter = {};
@@ -122,9 +133,20 @@ export const getComplaints = async (req, res, next) => {
       filter.status = statusTrimmed;
     }
 
-    // Optional category filter
+    // Optional category filter with dashboard alias mapping
     if (req.query.category) {
-      filter.category = String(req.query.category).trim();
+      const categoryTrimmed = String(req.query.category).trim();
+      if (categoryTrimmed && categoryTrimmed.toLowerCase() !== 'all') {
+        const lower = categoryTrimmed.toLowerCase();
+        if (CATEGORY_ALIASES[lower]) {
+          filter.category = CATEGORY_ALIASES[lower];
+        } else {
+          const canonicalMatch = COMPLAINT_CATEGORIES.find(
+            (cat) => cat.toLowerCase() === lower
+          );
+          filter.category = canonicalMatch || categoryTrimmed;
+        }
+      }
     }
 
     const skip = (page - 1) * limit;

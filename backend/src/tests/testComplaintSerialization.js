@@ -193,6 +193,115 @@ const runTests = async () => {
       // Cleanup test document
       await Complaint.findByIdAndDelete(testId);
     }
+
+    console.log('\n🎯 Test Suite 3: P2 → P4 Category Alias & Limit Contract Tests');
+    {
+      // Seed test complaints for each canonical category
+      const seededComplaints = await Complaint.insertMany([
+        {
+          originalText: 'P2 P4 Contract Test: Leaking pipe on MG Road',
+          location: { type: 'Point', coordinates: [77.4101, 23.2501] },
+          category: 'Water Supply',
+          status: 'processed',
+        },
+        {
+          originalText: 'P2 P4 Contract Test: Pothole on Express Highway',
+          location: { type: 'Point', coordinates: [77.4102, 23.2502] },
+          category: 'Roads & Infrastructure',
+          status: 'processed',
+        },
+        {
+          originalText: 'P2 P4 Contract Test: Garbage pile near community park',
+          location: { type: 'Point', coordinates: [77.4103, 23.2503] },
+          category: 'Sanitation & Waste Management',
+          status: 'processed',
+        },
+        {
+          originalText: 'P2 P4 Contract Test: Transformer sparking in block B',
+          location: { type: 'Point', coordinates: [77.4104, 23.2504] },
+          category: 'Electricity & Power',
+          status: 'processed',
+        },
+        {
+          originalText: 'P2 P4 Contract Test: General civic inquiry',
+          location: { type: 'Point', coordinates: [77.4105, 23.2505] },
+          category: 'Other',
+          status: 'processed',
+        },
+      ]);
+
+      const seededIds = seededComplaints.map((c) => c._id);
+
+      try {
+        // 3.1 ?category=Water returns Water Supply complaints
+        const waterRes = await makeHttpRequest(expressServer.url, '/api/complaints?category=Water');
+        assert(waterRes.status === 200, '3.1 GET /api/complaints?category=Water returns 200');
+        assert(
+          Array.isArray(waterRes.body.data) &&
+          waterRes.body.data.length > 0 &&
+          waterRes.body.data.every((c) => c.category === 'Water Supply'),
+          '3.1 ?category=Water maps to and returns Water Supply complaints'
+        );
+
+        // 3.2 ?category=Roads returns Roads & Infrastructure complaints
+        const roadsRes = await makeHttpRequest(expressServer.url, '/api/complaints?category=Roads');
+        assert(roadsRes.status === 200, '3.2 GET /api/complaints?category=Roads returns 200');
+        assert(
+          Array.isArray(roadsRes.body.data) &&
+          roadsRes.body.data.length > 0 &&
+          roadsRes.body.data.every((c) => c.category === 'Roads & Infrastructure'),
+          '3.2 ?category=Roads maps to and returns Roads & Infrastructure complaints'
+        );
+
+        // 3.3 ?category=Sanitation returns Sanitation & Waste Management complaints
+        const sanRes = await makeHttpRequest(expressServer.url, '/api/complaints?category=Sanitation');
+        assert(sanRes.status === 200, '3.3 GET /api/complaints?category=Sanitation returns 200');
+        assert(
+          Array.isArray(sanRes.body.data) &&
+          sanRes.body.data.length > 0 &&
+          sanRes.body.data.every((c) => c.category === 'Sanitation & Waste Management'),
+          '3.3 ?category=Sanitation maps to and returns Sanitation & Waste Management complaints'
+        );
+
+        // 3.4 ?category=Electricity returns Electricity & Power complaints
+        const elecRes = await makeHttpRequest(expressServer.url, '/api/complaints?category=Electricity');
+        assert(elecRes.status === 200, '3.4 GET /api/complaints?category=Electricity returns 200');
+        assert(
+          Array.isArray(elecRes.body.data) &&
+          elecRes.body.data.length > 0 &&
+          elecRes.body.data.every((c) => c.category === 'Electricity & Power'),
+          '3.4 ?category=Electricity maps to and returns Electricity & Power complaints'
+        );
+
+        // 3.5 Existing canonical category filtering still works
+        const canonicalWaterRes = await makeHttpRequest(expressServer.url, '/api/complaints?category=Water%20Supply');
+        assert(canonicalWaterRes.status === 200, '3.5 GET /api/complaints?category=Water%20Supply returns 200');
+        assert(
+          canonicalWaterRes.body.data.every((c) => c.category === 'Water Supply'),
+          '3.5 Canonical "Water Supply" filter returns matching complaints'
+        );
+
+        const otherRes = await makeHttpRequest(expressServer.url, '/api/complaints?category=Other');
+        assert(otherRes.status === 200, '3.5 GET /api/complaints?category=Other returns 200');
+        assert(
+          otherRes.body.data.every((c) => c.category === 'Other'),
+          '3.5 Canonical "Other" category filter returns matching complaints'
+        );
+
+        // 3.6 limit=1000 is accepted
+        const limit1000Res = await makeHttpRequest(expressServer.url, '/api/complaints?limit=1000');
+        assert(limit1000Res.status === 200, '3.6 GET /api/complaints?limit=1000 returns 200');
+        assert(limit1000Res.body.pagination.limit === 1000, '3.6 limit=1000 is accepted and reflected in pagination');
+
+        // 3.7 limit above 1000 is capped at 1000
+        const limitAboveRes = await makeHttpRequest(expressServer.url, '/api/complaints?limit=1500');
+        assert(limitAboveRes.status === 200, '3.7 GET /api/complaints?limit=1500 returns 200');
+        assert(limitAboveRes.body.pagination.limit === 1000, '3.7 limit above 1000 is capped to 1000');
+      } finally {
+        // Cleanup all seeded test documents
+        await Complaint.deleteMany({ _id: { $in: seededIds } });
+      }
+    }
   } finally {
     await expressServer.close();
     await mongoose.disconnect();
