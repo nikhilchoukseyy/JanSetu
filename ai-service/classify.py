@@ -12,8 +12,7 @@ def classify_complaint(text: str) -> str:
         messages=[
             {
                 "role": "system",
-                "content": "You classify civic complaints into exactly one category: roads, water, electricity, sanitation, or other. Respond with only the category word, nothing else."
-            },
+                "content": "You classify civic complaints into exactly one category: Water Supply, Roads & Infrastructure, Sanitation & Waste Management, Electricity & Power, Public Health, Public Transport, or Other. Respond with only the category name exactly as written above, nothing else."            },
             {
                 "role": "user",
                 "content": text

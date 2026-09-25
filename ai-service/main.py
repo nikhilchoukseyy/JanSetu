@@ -6,8 +6,10 @@ app = FastAPI()
 
 class ComplaintInput(BaseModel):
     text: str
-    source_language: str | None = None
+    language: str | None = None
+
 
 @app.post("/process-complaint")
 def process(complaint: ComplaintInput):
-    return process_complaint(complaint.text, complaint.source_language)
+    return process_complaint(complaint.text, complaint.language)
+
