@@ -1,7 +1,11 @@
 from translate import translate_to_english
 from classify import classify_complaint
+from transcribe import transcribe_audio
 
-def process_complaint(text: str, source_language: str = None) -> dict:
+def process_complaint(text: str = None, audio_path: str = None, source_language: str = None) -> dict:
+    if audio_path:
+        text = transcribe_audio(audio_path)
+
     translation = translate_to_english(text, source_language)
     category = classify_complaint(translation["translated_text"])
     return {
@@ -9,8 +13,3 @@ def process_complaint(text: str, source_language: str = None) -> dict:
         "language": translation["language"],
         "category": category
     }
-
-if __name__ == "__main__":
-    test_text = "MG Road पर एक बड़ा गड्ढा है, बहुत खतरनाक है।"
-    result = process_complaint("There is no bus service on route 42 for the past week", "English")
-    print(result)
