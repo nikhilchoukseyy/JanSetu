@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Complaint from '../models/Complaint.js';
 import { processComplaint } from '../services/complaintProcessingService.js';
+import { serializeComplaint, serializeComplaints } from '../serializers/complaintSerializer.js';
 
 const ALLOWED_STATUSES = ['received', 'processing', 'processed', 'failed'];
 
@@ -74,14 +75,10 @@ export const createComplaint = async (req, res, next) => {
 
     const complaint = await Complaint.create(complaintData);
 
-    // Exclude internal Mongoose __v from response
-    const responseData = complaint.toObject();
-    delete responseData.__v;
-
     return res.status(201).json({
       success: true,
       message: 'Complaint registered successfully',
-      data: responseData,
+      data: serializeComplaint(complaint),
     });
   } catch (error) {
     // Handle Mongoose validation errors gracefully
@@ -146,7 +143,7 @@ export const getComplaints = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: complaints,
+      data: serializeComplaints(complaints),
       pagination: {
         total: totalDocs,
         page,
@@ -189,7 +186,7 @@ export const getComplaintById = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: complaint,
+      data: serializeComplaint(complaint),
     });
   } catch (error) {
     next(error);
@@ -214,9 +211,7 @@ export const processComplaintById = async (req, res, next) => {
     };
 
     if (result.data) {
-      const dataObj = result.data.toObject ? result.data.toObject() : { ...result.data };
-      delete dataObj.__v;
-      responsePayload.data = dataObj;
+      responsePayload.data = serializeComplaint(result.data);
     }
 
     return res.status(result.statusCode).json(responsePayload);
