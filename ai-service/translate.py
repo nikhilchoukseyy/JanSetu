@@ -6,23 +6,20 @@ load_dotenv()
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-def translate_to_english(text: str, source_language: str = None) -> str:
+def translate_to_english(text: str, source_language: str = None) -> dict:
     lang_hint = f" The text is in {source_language}." if source_language else ""
     response = client.chat.completions.create(
         model="openai/gpt-oss-20b",
         messages=[
-            {
-                "role": "system",
-                "content": f"Translate the user's message to English.{lang_hint} Respond with only the translation, nothing else."
-            },
-            {
-                "role": "user",
-                "content": text
-            }
+            {"role": "system", "content": f"Translate the user's message to English.{lang_hint} Respond with only the translation, nothing else."},
+            {"role": "user", "content": text}
         ],
         temperature=0
     )
-    return response.choices[0].message.content.strip()
+    return {
+        "translated_text": response.choices[0].message.content.strip(),
+        "language": source_language or "unknown"
+    }
 
 if __name__ == "__main__":
     tests = {
