@@ -1,11 +1,10 @@
 import jwt from "jsonwebtoken";
 
-const POLICYMAKER_EMAIL = process.env.POLICYMAKER_EMAIL;
-const POLICYMAKER_PASSWORD = process.env.POLICYMAKER_PASSWORD;
-
 export async function loginPolicymaker(req, res) {
   try {
     const { email, password } = req.body;
+    const policymakerEmail = process.env.POLICYMAKER_EMAIL;
+    const policymakerPassword = process.env.POLICYMAKER_PASSWORD;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -15,8 +14,10 @@ export async function loginPolicymaker(req, res) {
     }
 
     if (
-      email.toLowerCase() !== POLICYMAKER_EMAIL?.toLowerCase() ||
-      password !== POLICYMAKER_PASSWORD
+      !policymakerEmail ||
+      !policymakerPassword ||
+      email.toLowerCase() !== policymakerEmail.toLowerCase() ||
+      password !== policymakerPassword
     ) {
       return res.status(401).json({
         success: false,
@@ -27,7 +28,7 @@ export async function loginPolicymaker(req, res) {
     const token = jwt.sign(
       {
         role: "policymaker",
-        email: POLICYMAKER_EMAIL,
+        email: policymakerEmail,
       },
       process.env.JWT_SECRET,
       {
@@ -41,7 +42,7 @@ export async function loginPolicymaker(req, res) {
       token,
       user: {
         role: "policymaker",
-        email: POLICYMAKER_EMAIL,
+        email: policymakerEmail,
       },
     });
   } catch (error) {
