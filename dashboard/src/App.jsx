@@ -63,21 +63,21 @@ export default function App() {
       setIsLoading(true);
       try {
         const [complaints, metrics, trends, breakdown, signals, stages] =
-          await Promise.all([
-            fetchComplaints({ category: selectedCategory, timeframe }),
-            fetchSummaryMetrics(),
-            fetchDemandTrends(),
-            fetchCategoryBreakdown(),
-            fetchAISignals(),
-            fetchFusionStages(),
-          ]);
+  await Promise.all([
+    fetchComplaints({ category: selectedCategory, timeframe }),
+    fetchSummaryMetrics(),
+    fetchDemandTrends(),
+    fetchCategoryBreakdown(),
+    fetchAISignals(),
+    fetchFusionStages(),
+  ]);
 
-        setHotspots(complaints);
-        setMetricsData(metrics);
-        setTrendData(trends);
-        setCategoryData(breakdown);
-        setAiSignals(signals);
-        setFusionStages(stages);
+setHotspots(complaints.complaints || []);
+setMetricsData(metrics);
+setTrendData(trends);
+setCategoryData(breakdown);
+setAiSignals(signals);
+setFusionStages(stages);
       } catch (err) {
         console.error("Error loading JanSetu data:", err);
       } finally {
