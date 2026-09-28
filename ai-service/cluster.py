@@ -1,14 +1,17 @@
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-
-# Loads once when the module is imported — the first call downloads the
-# model (~80MB), after that it's cached locally and loads instantly.
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
 SIMILARITY_THRESHOLD = 0.75  # tune this after testing real examples
 
+_model = None
+
+def _get_model():
+    # Loaded on first use, so the service starts fast and light
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
+
 def get_embedding(text: str):
-    return model.encode(text)
+    return _get_model().encode(text)
 
 def find_duplicate(new_text: str, existing_complaints: list[dict]) -> dict | None:
     """
@@ -18,6 +21,8 @@ def find_duplicate(new_text: str, existing_complaints: list[dict]) -> dict | Non
     """
     if not existing_complaints:
         return None
+
+    from sklearn.metrics.pairwise import cosine_similarity
 
     new_embedding = get_embedding(new_text)
     best_match = None
@@ -33,18 +38,3 @@ def find_duplicate(new_text: str, existing_complaints: list[dict]) -> dict | Non
     if best_score >= SIMILARITY_THRESHOLD:
         return {**best_match, "similarity": float(best_score)}
     return None
-
-
-if __name__ == "__main__":
-    existing = [
-        {"id": 1, "text": "There is a huge pothole on MG Road near the market"},
-        {"id": 2, "text": "Streetlight not working on Station Road for a week"},
-    ]
-
-    # Should match complaint 1 — same issue, different wording
-    test_1 = "Big pothole near MG Road market area, very dangerous"
-    print("Test 1:", find_duplicate(test_1, existing))
-
-    # Should NOT match anything — genuinely different complaint
-    test_2 = "No water supply in our colony since three days"
-    print("Test 2:", find_duplicate(test_2, existing))
