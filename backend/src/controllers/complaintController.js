@@ -86,6 +86,11 @@ export const createComplaint = async (req, res, next) => {
 
     const complaint = await Complaint.create(complaintData);
 
+    // Exclude internal Mongoose __v from response
+    processComplaint(complaint._id.toString()).catch((err) => {
+  console.error("[AI] Background processing failed:", err.message);
+});
+
     return res.status(201).json({
       success: true,
       message: 'Complaint registered successfully',
