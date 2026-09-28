@@ -11,5 +11,4 @@ class ComplaintInput(BaseModel):
 
 @app.post("/process-complaint")
 def process(complaint: ComplaintInput):
-    return process_complaint(complaint.text, complaint.language)
-
+    return process_complaint(text=complaint.text, source_language=complaint.language)
