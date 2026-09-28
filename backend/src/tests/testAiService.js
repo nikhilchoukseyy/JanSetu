@@ -6,6 +6,8 @@ dotenv.config();
 
 import {
   analyzeComplaintText,
+  transcribeAudio,
+  findDuplicateComplaints,
   formatFastApiResponse,
   AiServiceError,
   COMPLAINT_CATEGORIES,
@@ -48,7 +50,7 @@ const runTests = async () => {
   console.log('🧪 JANSETU BACKEND - FASTAPI AI ADAPTER TEST SUITE');
   console.log('======================================================\n');
 
-  // TEST SUITE 1: Input Validation
+  // TEST SUITE 1: Input Validation for analyzeComplaintText
   console.log('📦 Test Suite 1: Input Validation & Defensive Guardrails');
   {
     // Empty string
@@ -159,7 +161,7 @@ const runTests = async () => {
     }
   }
 
-  // TEST SUITE 3: HTTP Adapter & Mock Server Integration
+  // TEST SUITE 3: HTTP Adapter & Mock Server Integration for analyzeComplaintText
   console.log('\n🌐 Test Suite 3: HTTP Adapter & Mock Server Integration');
   {
     // 3.1 Successful 200 response from FastAPI mock server
@@ -225,7 +227,7 @@ const runTests = async () => {
     // 3.3 Connection failure (unreachable port)
     try {
       await analyzeComplaintText('Some text', {
-        aiServiceUrl: 'http://127.0.0.1:59999', // Non-existent port
+        aiServiceUrl: 'http://127.0.0.1:59999',
         timeout: 1000,
       });
       assert(false, 'Should throw on unreachable network endpoint');
@@ -244,7 +246,7 @@ const runTests = async () => {
     try {
       await analyzeComplaintText('Some text', {
         aiServiceUrl: slowMockServer.url,
-        timeout: 200, // 200ms timeout
+        timeout: 200,
       });
       assert(false, 'Should throw on timeout');
     } catch (err) {
@@ -257,8 +259,266 @@ const runTests = async () => {
     }
   }
 
-  // TEST SUITE 4: Regression & Express App Integrity
-  console.log('\n🛡️ Test Suite 4: Express App & Routing Regression');
+  // TEST SUITE 4: Audio Transcription Adapter (transcribeAudio)
+  console.log('\n🎙️ Test Suite 4: Audio Transcription Adapter (transcribeAudio)');
+  {
+    // 4.1 Input validation guards
+    try {
+      await transcribeAudio(null);
+      assert(false, 'Should reject null audio input');
+    } catch (err) {
+      assert(err instanceof AiServiceError && err.code === 'INVALID_INPUT', 'Rejects null audio with INVALID_INPUT');
+    }
+
+    try {
+      await transcribeAudio(Buffer.alloc(0));
+      assert(false, 'Should reject empty buffer');
+    } catch (err) {
+      assert(err instanceof AiServiceError && err.code === 'INVALID_INPUT', 'Rejects empty audio buffer with INVALID_INPUT');
+    }
+
+    // 4.2 Successful transcription via mock server
+    const mockAudioServer = await createMockServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/transcribe') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: 'Main road has large potholes near the junction.' }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    try {
+      const fakeAudioBuffer = Buffer.from('RIFF_FAKE_AUDIO_DATA_FOR_TEST');
+      const result = await transcribeAudio(fakeAudioBuffer, {
+        aiServiceUrl: mockAudioServer.url,
+      });
+
+      assert(
+        result && result.text === 'Main road has large potholes near the junction.',
+        'transcribeAudio successfully receives and normalizes transcribed text'
+      );
+      assert(
+        String(result) === 'Main road has large potholes near the junction.',
+        'transcribeAudio result supports string coercion'
+      );
+    } catch (err) {
+      assert(false, 'transcribeAudio mock call failed', err.message);
+    } finally {
+      await mockAudioServer.close();
+    }
+
+    // 4.3 Handles Multer file object shape
+    const mockMulterServer = await createMockServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ text: 'Multer audio transcription test.' }));
+    });
+
+    try {
+      const multerFile = {
+        buffer: Buffer.from('AUDIO_BUFFER_CONTENT'),
+        originalname: 'voice.wav',
+        mimetype: 'audio/wav',
+      };
+      const result = await transcribeAudio(multerFile, {
+        aiServiceUrl: mockMulterServer.url,
+      });
+      assert(result.text === 'Multer audio transcription test.', 'Handles multer-style file objects');
+    } catch (err) {
+      assert(false, 'Multer file transcription failed', err.message);
+    } finally {
+      await mockMulterServer.close();
+    }
+
+    // 4.4 HTTP 500 error handling
+    const errorAudioServer = await createMockServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ detail: 'Whisper Groq API error' }));
+    });
+
+    try {
+      await transcribeAudio(Buffer.from('AUDIO'), {
+        aiServiceUrl: errorAudioServer.url,
+      });
+      assert(false, 'Should throw on HTTP 500');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'HTTP_ERROR' && err.statusCode === 500,
+        'transcribeAudio handles HTTP 500 with HTTP_ERROR'
+      );
+    } finally {
+      await errorAudioServer.close();
+    }
+
+    // 4.5 Timeout error handling
+    const slowAudioServer = await createMockServer(() => {});
+    try {
+      await transcribeAudio(Buffer.from('AUDIO'), {
+        aiServiceUrl: slowAudioServer.url,
+        timeout: 150,
+      });
+      assert(false, 'Should throw on timeout');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'TIMEOUT_ERROR',
+        'transcribeAudio handles timeout with TIMEOUT_ERROR'
+      );
+    } finally {
+      await slowAudioServer.close();
+    }
+
+    // 4.6 Malformed response handling
+    const malformedAudioServer = await createMockServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ missing_text: true }));
+    });
+
+    try {
+      await transcribeAudio(Buffer.from('AUDIO'), {
+        aiServiceUrl: malformedAudioServer.url,
+      });
+      assert(false, 'Should throw on missing text field');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'PARSE_ERROR',
+        'transcribeAudio handles missing text field with PARSE_ERROR'
+      );
+    } finally {
+      await malformedAudioServer.close();
+    }
+  }
+
+  // TEST SUITE 5: Duplicate Detection Adapter (findDuplicateComplaints)
+  console.log('\n🔍 Test Suite 5: Duplicate Detection Adapter (findDuplicateComplaints)');
+  {
+    // 5.1 Input validation guards
+    try {
+      await findDuplicateComplaints('');
+      assert(false, 'Should reject empty newText');
+    } catch (err) {
+      assert(err instanceof AiServiceError && err.code === 'INVALID_INPUT', 'Rejects empty newText with INVALID_INPUT');
+    }
+
+    try {
+      await findDuplicateComplaints('Some valid text', 'not an array');
+      assert(false, 'Should reject non-array existingComplaints');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'INVALID_INPUT',
+        'Rejects non-array existingComplaints with INVALID_INPUT'
+      );
+    }
+
+    // 5.2 Successful match response from mock server
+    const mockClusterServer = await createMockServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/find-duplicate') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          if (parsed.new_text && parsed.existing_complaints) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                match: {
+                  id: 'c101',
+                  text: 'Pothole on Main St',
+                  similarity: 0.89,
+                },
+              })
+            );
+          } else {
+            res.writeHead(400);
+            res.end();
+          }
+        });
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    try {
+      const result = await findDuplicateComplaints(
+        'Dangerous pothole on Main St near signal',
+        [{ id: 'c101', text: 'Pothole on Main St' }],
+        { aiServiceUrl: mockClusterServer.url }
+      );
+
+      assert(
+        result &&
+          result.match &&
+          result.match.id === 'c101' &&
+          result.match.text === 'Pothole on Main St' &&
+          result.match.similarity === 0.89,
+        'findDuplicateComplaints successfully parses duplicate match'
+      );
+    } catch (err) {
+      assert(false, 'findDuplicateComplaints match call failed', err.message);
+    } finally {
+      await mockClusterServer.close();
+    }
+
+    // 5.3 Successful no-match response from mock server
+    const mockNoMatchServer = await createMockServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ match: null }));
+    });
+
+    try {
+      const result = await findDuplicateComplaints(
+        'Water pipe burst in colony',
+        [{ id: 'c101', text: 'Pothole on Main St' }],
+        { aiServiceUrl: mockNoMatchServer.url }
+      );
+
+      assert(result && result.match === null, 'findDuplicateComplaints returns { match: null } when no match');
+    } catch (err) {
+      assert(false, 'findDuplicateComplaints no-match call failed', err.message);
+    } finally {
+      await mockNoMatchServer.close();
+    }
+
+    // 5.4 HTTP 500 error handling
+    const errorClusterServer = await createMockServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ detail: 'Embedding computation failed' }));
+    });
+
+    try {
+      await findDuplicateComplaints('Some text', [], {
+        aiServiceUrl: errorClusterServer.url,
+      });
+      assert(false, 'Should throw on HTTP 500');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'HTTP_ERROR' && err.statusCode === 500,
+        'findDuplicateComplaints handles HTTP 500 with HTTP_ERROR'
+      );
+    } finally {
+      await errorClusterServer.close();
+    }
+
+    // 5.5 Timeout handling
+    const slowClusterServer = await createMockServer(() => {});
+    try {
+      await findDuplicateComplaints('Some text', [], {
+        aiServiceUrl: slowClusterServer.url,
+        timeout: 150,
+      });
+      assert(false, 'Should throw on timeout');
+    } catch (err) {
+      assert(
+        err instanceof AiServiceError && err.code === 'TIMEOUT_ERROR',
+        'findDuplicateComplaints handles timeout with TIMEOUT_ERROR'
+      );
+    } finally {
+      await slowClusterServer.close();
+    }
+  }
+
+  // TEST SUITE 6: Express App & Routing Regression
+  console.log('\n🛡️ Test Suite 6: Express App & Routing Regression');
   try {
     const { default: app } = await import('../app.js');
     assert(Boolean(app && typeof app.use === 'function'), 'Express app imports cleanly without module resolution errors');
