@@ -1,23 +1,5 @@
-/**
- * JanSetu Civic Intelligence Platform
- * API Service Abstraction Layer
- * 
- * Allows seamless switching between realistic local mock data and a live backend
- * simply by specifying VITE_API_BASE_URL in .env.
- * 
- * Target endpoint: GET /api/complaints
- */
-
-import {
-  MOCK_COMPLAINTS,
-  MOCK_SUMMARY_METRICS,
-  MOCK_DEMAND_TRENDS,
-  MOCK_CATEGORY_BREAKDOWN,
-  MOCK_AI_SIGNALS,
-  MOCK_DATA_FUSION_STAGES,
-} from "../data/mockData";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 export const isLiveBackendConnected = Boolean(API_BASE_URL);
 
@@ -71,8 +53,7 @@ function normalizeComplaint(complaint, index) {
 }
 
 /**
- * Fetch complaint clusters / hotspots.
- * Maps backend responses to the standard complaint schema if needed.
+ * GET /api/complaints
  */
 export async function fetchComplaints(filters = {}) {
   const { category = "All", timeframe = "30d" } = filters;
@@ -102,10 +83,24 @@ export async function fetchComplaints(filters = {}) {
       console.warn("JanSetu API service: falling back to mock dataset due to fetch failure:", err);
       return filterMockComplaints(category, timeframe);
     }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch complaints: ${response.status} ${response.statusText}`
+    );
   }
 
-  // Fallback to local mock data layer
-  return filterMockComplaints(category, timeframe);
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.message || "Failed to fetch complaints");
+  }
+
+  return {
+    complaints: Array.isArray(result.data) ? result.data : [],
+    pagination: result.pagination || null,
+  };
 }
 
 function filterMockComplaints(category, timeframe) {
@@ -113,68 +108,133 @@ function filterMockComplaints(category, timeframe) {
   if (category && category !== "All") {
     list = list.filter((item) => item.category?.toLowerCase() === category.toLowerCase());
   }
-  // Subtle mock variation based on timeframe
-  if (timeframe === "7d") {
-    list = list.map((item) => ({
-      ...item,
-      requestCount: Math.round(item.requestCount * 0.28),
-      reportedChange: "+32% in 7d",
-    }));
+
+  const response = await fetch(`${API_BASE_URL}/api/complaints/${id}`, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch complaint: ${response.status} ${response.statusText}`
+    );
   }
-  return list;
+
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.message || "Failed to fetch complaint");
+  }
+
+  return result.data;
 }
 
 /**
- * Fetch summary metrics for KPI cards
+ * Calculate dashboard summary from real complaints.
  */
 export async function fetchSummaryMetrics() {
-  if (API_BASE_URL) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/analytics/summary`);
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch {
-      // Fallback
-    }
-  }
-  return MOCK_SUMMARY_METRICS;
+  const { complaints } = await fetchComplaints({ limit: 1000 });
+
+  const total = complaints.length;
+
+  const resolved = complaints.filter(
+    (complaint) =>
+      String(complaint.status || "").toLowerCase() === "resolved"
+  ).length;
+
+  const pending = complaints.filter(
+    (complaint) =>
+      String(complaint.status || "").toLowerCase() !== "resolved"
+  ).length;
+
+  return {
+    totalReports: total,
+    resolved,
+    pending,
+    resolutionRate: total
+      ? Math.round((resolved / total) * 100)
+      : 0,
+  };
 }
 
 /**
- * Fetch historical demand trends
- */
-export async function fetchDemandTrends() {
-  if (API_BASE_URL) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/analytics/trends`);
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch {
-      // Fallback
-    }
-  }
-  return MOCK_DEMAND_TRENDS;
-}
-
-/**
- * Fetch category breakdown
+ * Calculate category distribution from real complaints.
  */
 export async function fetchCategoryBreakdown() {
-  return MOCK_CATEGORY_BREAKDOWN;
+  const { complaints } = await fetchComplaints({ limit: 1000 });
+
+  const counts = {};
+
+  complaints.forEach((complaint) => {
+    const category = complaint.category || "Other";
+    counts[category] = (counts[category] || 0) + 1;
+  });
+
+  return Object.entries(counts).map(([name, value]) => ({
+    name,
+    value,
+  }));
 }
 
 /**
- * Fetch AI Signals
+ * Calculate demand trend from real complaint creation dates.
+ */
+export async function fetchDemandTrends() {
+  const { complaints } = await fetchComplaints({ limit: 1000 });
+
+  const counts = {};
+
+  complaints.forEach((complaint) => {
+    const dateValue =
+      complaint.createdAt ||
+      complaint.created_at ||
+      complaint.timestamp;
+
+    if (!dateValue) return;
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) return;
+
+    const key = date.toISOString().slice(0, 10);
+
+    counts[key] = (counts[key] || 0) + 1;
+  });
+
+  return Object.entries(counts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, requests]) => ({
+      date,
+      requests,
+    }));
+}
+
+/**
+ * AI signals are not connected yet.
+ *
+ * Do not invent AI results before the AI service is integrated.
  */
 export async function fetchAISignals() {
-  return MOCK_AI_SIGNALS;
+  return [];
 }
 
 /**
- * Fetch Data Fusion Pipeline Stages
+ * AI/data-fusion pipeline is not connected yet.
  */
 export async function fetchFusionStages() {
-  return MOCK_DATA_FUSION_STAGES;
+  return [];
+}
+
+/**
+ * Check backend health.
+ */
+export async function checkBackendHealth() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/health`);
+
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
