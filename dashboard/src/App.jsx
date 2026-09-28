@@ -101,10 +101,12 @@ export default function App() {
   };
 
   const handleSelectWardByName = (wardName) => {
+    const normalizedWardName = String(wardName ?? "").toLowerCase();
+    if (!normalizedWardName) return;
     const match = hotspots.find(
       (h) =>
-        h.shortName.toLowerCase().includes(wardName.toLowerCase()) ||
-        wardName.toLowerCase().includes(h.shortName.toLowerCase())
+        String(h.shortName ?? "").toLowerCase().includes(normalizedWardName) ||
+        normalizedWardName.includes(String(h.shortName ?? "").toLowerCase())
     );
     if (match) {
       handleSelectHotspot(match.id);

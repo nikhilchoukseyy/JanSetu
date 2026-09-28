@@ -52,7 +52,7 @@ function MapController({ targetCoord }) {
 // Custom DivIcon generator with animated pulse ring based on severity
 function createHotspotIcon(spot, isSelected) {
   const getColors = () => {
-    switch (spot.category.toLowerCase()) {
+    switch (String(spot.category ?? "").toLowerCase()) {
       case "water":
         return {
           bg: "#00684A",
@@ -149,7 +149,7 @@ export default function DemandMap({
   const filteredHotspots = useMemo(() => {
     if (!selectedCategory || selectedCategory === "All") return hotspots;
     return hotspots.filter(
-      (h) => h.category.toLowerCase() === selectedCategory.toLowerCase()
+      (h) => String(h.category ?? "").toLowerCase() === String(selectedCategory).toLowerCase()
     );
   }, [hotspots, selectedCategory]);
 
@@ -230,7 +230,7 @@ export default function DemandMap({
           )}
 
           {/* Render Cluster Hotspots */}
-          {filteredHotspots.map((spot) => {
+          {filteredHotspots.filter((spot) => Number.isFinite(spot.latitude) && Number.isFinite(spot.longitude)).map((spot) => {
             const isSelected = spot.id === selectedHotspotId;
             const icon = createHotspotIcon(spot, isSelected);
 

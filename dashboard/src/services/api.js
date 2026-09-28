@@ -21,6 +21,55 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 export const isLiveBackendConnected = Boolean(API_BASE_URL);
 
+const asText = (value, fallback = "") =>
+  typeof value === "string" && value.trim() ? value.trim() : fallback;
+
+function displayCategory(value) {
+  const category = asText(value, "Uncategorized");
+  const normalized = category.toLowerCase();
+
+  if (normalized.includes("water")) return "Water";
+  if (normalized.includes("road") || normalized.includes("infrastructure")) return "Roads";
+  if (normalized.includes("electric") || normalized.includes("power")) return "Electricity";
+  if (normalized.includes("sanitation") || normalized.includes("waste")) return "Sanitation";
+  return category;
+}
+
+// The API returns individual Complaint documents while the dashboard renders
+// hotspot cards. Keep the UI schema complete even while AI enrichment fields
+// (category and summary) are still null.
+function normalizeComplaint(complaint, index) {
+  const coordinates = complaint?.location?.coordinates;
+  const hasCoordinates =
+    Array.isArray(coordinates) &&
+    Number.isFinite(coordinates[0]) &&
+    Number.isFinite(coordinates[1]);
+  const id = complaint?.id || complaint?._id || `complaint-${index}`;
+  const area = asText(complaint?.area, "Reported location");
+  const leadIssue = asText(
+    complaint?.summary,
+    asText(complaint?.translatedText, asText(complaint?.originalText, "Awaiting complaint details"))
+  );
+
+  return {
+    ...complaint,
+    id: String(id),
+    category: displayCategory(complaint?.category),
+    area,
+    shortName: asText(complaint?.shortName, area),
+    leadIssue,
+    requestCount: Number.isFinite(complaint?.requestCount) ? complaint.requestCount : 1,
+    priorityScore: Number.isFinite(complaint?.priorityScore) ? complaint.priorityScore : 0,
+    latitude: hasCoordinates ? coordinates[1] : null,
+    longitude: hasCoordinates ? coordinates[0] : null,
+    reportedChange: asText(complaint?.reportedChange, "New report"),
+    slaDaysRemaining: Number.isFinite(complaint?.slaDaysRemaining) ? complaint.slaDaysRemaining : "—",
+    infrastructureIndex: asText(complaint?.infrastructureIndex, "Pending assessment"),
+    populationDensity: asText(complaint?.populationDensity, "Pending assessment"),
+    assignedDepartment: asText(complaint?.assignedDepartment, "Unassigned"),
+  };
+}
+
 /**
  * Fetch complaint clusters / hotspots.
  * Maps backend responses to the standard complaint schema if needed.
@@ -46,8 +95,9 @@ export async function fetchComplaints(filters = {}) {
       }
 
       const data = await response.json();
-      // Ensure expected fields exist
-      return Array.isArray(data) ? data : (data.complaints || data.data || MOCK_COMPLAINTS);
+      const complaints = Array.isArray(data) ? data : (data.complaints || data.data || []);
+      if (!Array.isArray(complaints)) throw new Error("Invalid complaints response");
+      return complaints.map(normalizeComplaint);
     } catch (err) {
       console.warn("JanSetu API service: falling back to mock dataset due to fetch failure:", err);
       return filterMockComplaints(category, timeframe);
@@ -61,7 +111,7 @@ export async function fetchComplaints(filters = {}) {
 function filterMockComplaints(category, timeframe) {
   let list = [...MOCK_COMPLAINTS];
   if (category && category !== "All") {
-    list = list.filter((item) => item.category.toLowerCase() === category.toLowerCase());
+    list = list.filter((item) => item.category?.toLowerCase() === category.toLowerCase());
   }
   // Subtle mock variation based on timeframe
   if (timeframe === "7d") {
