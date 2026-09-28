@@ -90,7 +90,10 @@ export const processComplaint = async (complaintId, options = {}) => {
 
   // 5. Invoke AI Adapter
   try {
-    const aiResult = await analyzeComplaintText(complaint.originalText, options);
+    const aiResult = await analyzeComplaintText(complaint.originalText, {
+      ...options,
+      language: complaint.language,
+    });
 
     // 6. Persist structured AI fields & transition to 'processed'
     if (aiResult.language) {

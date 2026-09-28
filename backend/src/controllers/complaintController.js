@@ -77,6 +77,11 @@ export const createComplaint = async (req, res, next) => {
     // Exclude internal Mongoose __v from response
     const responseData = complaint.toObject();
     delete responseData.__v;
+    
+    // Start AI processing in the background; the citizen doesn't wait for it
+    processComplaint(complaint._id.toString()).catch((err) => {
+      console.error('[AI] Background processing failed:', err.message);
+    });
 
     return res.status(201).json({
       success: true,
