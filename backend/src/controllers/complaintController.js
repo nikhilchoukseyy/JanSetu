@@ -1,8 +1,20 @@
 import mongoose from 'mongoose';
 import Complaint from '../models/Complaint.js';
 import { processComplaint } from '../services/complaintProcessingService.js';
+import { serializeComplaint, serializeComplaints } from '../serializers/complaintSerializer.js';
+import { COMPLAINT_CATEGORIES } from '../services/aiService.js';
 
 const ALLOWED_STATUSES = ['received', 'processing', 'processed', 'failed'];
+
+/**
+ * Maps dashboard category filter aliases to backend canonical categories.
+ */
+const CATEGORY_ALIASES = {
+  water: 'Water Supply',
+  roads: 'Roads & Infrastructure',
+  sanitation: 'Sanitation & Waste Management',
+  electricity: 'Electricity & Power',
+};
 
 /**
  * @route   POST /api/complaints
@@ -75,18 +87,14 @@ export const createComplaint = async (req, res, next) => {
     const complaint = await Complaint.create(complaintData);
 
     // Exclude internal Mongoose __v from response
-    const responseData = complaint.toObject();
-    delete responseData.__v;
-    
-    // Start AI processing in the background; the citizen doesn't wait for it
     processComplaint(complaint._id.toString()).catch((err) => {
-      console.error('[AI] Background processing failed:', err.message);
-    });
+  console.error("[AI] Background processing failed:", err.message);
+});
 
     return res.status(201).json({
       success: true,
       message: 'Complaint registered successfully',
-      data: responseData,
+      data: serializeComplaint(complaint),
     });
   } catch (error) {
     // Handle Mongoose validation errors gracefully
@@ -112,8 +120,8 @@ export const getComplaints = async (req, res, next) => {
 
     const page = !isNaN(rawPage) && rawPage > 0 ? rawPage : 1;
     let limit = !isNaN(rawLimit) && rawLimit > 0 ? rawLimit : 10;
-    if (limit > 100) {
-      limit = 100; // Cap limit to prevent excessive resource consumption
+    if (limit > 1000) {
+      limit = 1000; // Cap limit to prevent excessive resource consumption
     }
 
     const filter = {};
@@ -130,9 +138,20 @@ export const getComplaints = async (req, res, next) => {
       filter.status = statusTrimmed;
     }
 
-    // Optional category filter
+    // Optional category filter with dashboard alias mapping
     if (req.query.category) {
-      filter.category = String(req.query.category).trim();
+      const categoryTrimmed = String(req.query.category).trim();
+      if (categoryTrimmed && categoryTrimmed.toLowerCase() !== 'all') {
+        const lower = categoryTrimmed.toLowerCase();
+        if (CATEGORY_ALIASES[lower]) {
+          filter.category = CATEGORY_ALIASES[lower];
+        } else {
+          const canonicalMatch = COMPLAINT_CATEGORIES.find(
+            (cat) => cat.toLowerCase() === lower
+          );
+          filter.category = canonicalMatch || categoryTrimmed;
+        }
+      }
     }
 
     const skip = (page - 1) * limit;
@@ -151,7 +170,7 @@ export const getComplaints = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: complaints,
+      data: serializeComplaints(complaints),
       pagination: {
         total: totalDocs,
         page,
@@ -194,7 +213,7 @@ export const getComplaintById = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: complaint,
+      data: serializeComplaint(complaint),
     });
   } catch (error) {
     next(error);
@@ -219,9 +238,7 @@ export const processComplaintById = async (req, res, next) => {
     };
 
     if (result.data) {
-      const dataObj = result.data.toObject ? result.data.toObject() : { ...result.data };
-      delete dataObj.__v;
-      responsePayload.data = dataObj;
+      responsePayload.data = serializeComplaint(result.data);
     }
 
     return res.status(result.statusCode).json(responsePayload);
