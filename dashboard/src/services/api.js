@@ -78,56 +78,17 @@ export async function fetchComplaints(filters = {}) {
       const data = await response.json();
       const complaints = Array.isArray(data) ? data : (data.complaints || data.data || []);
       if (!Array.isArray(complaints)) throw new Error("Invalid complaints response");
-      return complaints.map(normalizeComplaint);
+      return {
+        complaints: complaints.map(normalizeComplaint),
+        pagination: data.pagination || null,
+      };
     } catch (err) {
-      console.warn("JanSetu API service: falling back to mock dataset due to fetch failure:", err);
-      return filterMockComplaints(category, timeframe);
+      console.warn("JanSetu API service: unable to fetch complaints:", err);
+      return { complaints: [], pagination: null };
     }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch complaints: ${response.status} ${response.statusText}`
-    );
   }
 
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.message || "Failed to fetch complaints");
-  }
-
-  return {
-    complaints: Array.isArray(result.data) ? result.data : [],
-    pagination: result.pagination || null,
-  };
-}
-
-function filterMockComplaints(category, timeframe) {
-  let list = [...MOCK_COMPLAINTS];
-  if (category && category !== "All") {
-    list = list.filter((item) => item.category?.toLowerCase() === category.toLowerCase());
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/complaints/${id}`, {
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch complaint: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.message || "Failed to fetch complaint");
-  }
-
-  return result.data;
+  return { complaints: [], pagination: null };
 }
 
 /**
