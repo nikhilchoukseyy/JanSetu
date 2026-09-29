@@ -5,15 +5,12 @@ import complaintRoutes from './routes/complaintRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
 
+import { getCorsOptions } from './config/corsConfig.js';
+
 const app = express();
 
-// CORS middleware configuration
-const corsOptions = {
-  origin: process.env.CORS_ORIGIN || '*',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
-app.use(cors(corsOptions));
+// CORS middleware configuration with preflight support
+app.use(cors(getCorsOptions()));
 
 // Built-in body parsing middlewares with safe payload size limits
 app.use(express.json({ limit: '1mb' }));
