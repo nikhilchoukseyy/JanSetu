@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node src/tests/testAiService.js && node src/tests/testComplaintProcessing.js && node src/tests/testHardening.js && node src/tests/testComplaintSerialization.js"
+    "test": "node src/tests/testCors.js && node src/tests/testAiService.js && node src/tests/testComplaintProcessing.js && node src/tests/testHardening.js && node src/tests/testComplaintSerialization.js"
   },
   "keywords": [
     "jansetu",
