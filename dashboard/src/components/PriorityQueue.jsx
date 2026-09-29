@@ -21,17 +21,18 @@ export default function PriorityQueue({
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("score"); // score | requests
+  const normalize = (value) => String(value ?? "").toLowerCase();
 
   // Filter and sort priority items
   const filteredItems = hotspots
     .filter((item) => {
       const matchesCat =
         selectedCategory === "All" ||
-        item.category.toLowerCase() === selectedCategory.toLowerCase();
+        normalize(item.category) === normalize(selectedCategory);
       const matchesSearch =
-        item.area.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.leadIssue.toLowerCase().includes(searchQuery.toLowerCase());
+        normalize(item.area).includes(normalize(searchQuery)) ||
+        normalize(item.category).includes(normalize(searchQuery)) ||
+        normalize(item.leadIssue).includes(normalize(searchQuery));
       return matchesCat && matchesSearch;
     })
     .sort((a, b) => {
@@ -40,7 +41,7 @@ export default function PriorityQueue({
     });
 
   const getCategoryStyles = (category) => {
-    switch (category.toLowerCase()) {
+    switch (normalize(category)) {
       case "water":
         return "bg-[#E7F3ED] text-[#00684A] border-[#C6E5D5]";
       case "roads":
