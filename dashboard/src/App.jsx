@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import {
   Radio,
   FileSpreadsheet,
@@ -23,6 +24,8 @@ import PriorityQueue from "./components/PriorityQueue";
 import DemandTrend from "./components/DemandTrend";
 import AISignal from "./components/AISignal";
 import DataFusion from "./components/DataFusion";
+import Login from "./pages/Login";
+import { isAuthenticated } from "./services/auth";
 
 // Data & API Layer
 import {
@@ -35,7 +38,7 @@ import {
   isLiveBackendConnected,
 } from "./services/api";
 
-export default function App() {
+function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -423,5 +426,21 @@ setFusionStages(stages);
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function ProtectedRoute({ children }) {
+  return isAuthenticated() ? children : <Navigate to="/login" replace />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

@@ -3,6 +3,10 @@ import Home from "./pages/Home";
 import SubmitComplaint from "./pages/SubmitComplaint";
 
 function SiteHeader() {
+  const policymakerLoginUrl = `${(
+    import.meta.env.VITE_POLICYMAKER_APP_URL || "http://localhost:5174"
+  ).replace(/\/+$/, "")}/login`;
+
   return (
     <header className="border-b border-line bg-ivory/90 backdrop-blur supports-[backdrop-filter]:bg-ivory/80 sticky top-0 z-40">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -39,6 +43,12 @@ function SiteHeader() {
           >
             Submit a request
           </Link>
+          <a
+            href={policymakerLoginUrl}
+            className="inline-flex min-h-[44px] items-center rounded-xl border border-pine px-4 py-2 text-sm font-semibold text-pine transition-colors hover:bg-pine hover:text-white"
+          >
+            Login as Policymaker
+          </a>
         </nav>
       </div>
     </header>
