@@ -11,44 +11,119 @@ function displayCategory(value) {
   const normalized = category.toLowerCase();
 
   if (normalized.includes("water")) return "Water";
-  if (normalized.includes("road") || normalized.includes("infrastructure")) return "Roads";
-  if (normalized.includes("electric") || normalized.includes("power")) return "Electricity";
-  if (normalized.includes("sanitation") || normalized.includes("waste")) return "Sanitation";
+  if (
+    normalized.includes("road") ||
+    normalized.includes("infrastructure")
+  ) {
+    return "Roads";
+  }
+  if (
+    normalized.includes("electric") ||
+    normalized.includes("power")
+  ) {
+    return "Electricity";
+  }
+  if (
+    normalized.includes("sanitation") ||
+    normalized.includes("waste")
+  ) {
+    return "Sanitation";
+  }
+
   return category;
 }
 
-// The API returns individual Complaint documents while the dashboard renders
-// hotspot cards. Keep the UI schema complete even while AI enrichment fields
-// (category and summary) are still null.
+// Normalize individual complaint data for the dashboard.
 function normalizeComplaint(complaint, index) {
   const coordinates = complaint?.location?.coordinates;
+
   const hasCoordinates =
     Array.isArray(coordinates) &&
     Number.isFinite(coordinates[0]) &&
     Number.isFinite(coordinates[1]);
-  const id = complaint?.id || complaint?._id || `complaint-${index}`;
-  const area = asText(complaint?.area, "Reported location");
+
+  const id =
+    complaint?.id ||
+    complaint?._id ||
+    `complaint-${index}`;
+
+  const area = asText(
+    complaint?.area,
+    "Reported location"
+  );
+
   const leadIssue = asText(
     complaint?.summary,
-    asText(complaint?.translatedText, asText(complaint?.originalText, "Awaiting complaint details"))
+    asText(
+      complaint?.translatedText,
+      asText(
+        complaint?.originalText,
+        "Awaiting complaint details"
+      )
+    )
   );
 
   return {
     ...complaint,
+
     id: String(id),
+
     category: displayCategory(complaint?.category),
+
     area,
-    shortName: asText(complaint?.shortName, area),
+
+    shortName: asText(
+      complaint?.shortName,
+      area
+    ),
+
     leadIssue,
-    requestCount: Number.isFinite(complaint?.requestCount) ? complaint.requestCount : 1,
-    priorityScore: Number.isFinite(complaint?.priorityScore) ? complaint.priorityScore : 0,
-    latitude: hasCoordinates ? coordinates[1] : null,
-    longitude: hasCoordinates ? coordinates[0] : null,
-    reportedChange: asText(complaint?.reportedChange, "New report"),
-    slaDaysRemaining: Number.isFinite(complaint?.slaDaysRemaining) ? complaint.slaDaysRemaining : "—",
-    infrastructureIndex: asText(complaint?.infrastructureIndex, "Pending assessment"),
-    populationDensity: asText(complaint?.populationDensity, "Pending assessment"),
-    assignedDepartment: asText(complaint?.assignedDepartment, "Unassigned"),
+
+    requestCount: Number.isFinite(
+      complaint?.requestCount
+    )
+      ? complaint.requestCount
+      : 1,
+
+    priorityScore: Number.isFinite(
+      complaint?.priorityScore
+    )
+      ? complaint.priorityScore
+      : 0,
+
+    latitude: hasCoordinates
+      ? coordinates[1]
+      : null,
+
+    longitude: hasCoordinates
+      ? coordinates[0]
+      : null,
+
+    reportedChange: asText(
+      complaint?.reportedChange,
+      "New report"
+    ),
+
+    slaDaysRemaining: Number.isFinite(
+      complaint?.slaDaysRemaining
+    )
+      ? complaint.slaDaysRemaining
+      : "—",
+
+    infrastructureIndex: asText(
+      complaint?.infrastructureIndex,
+      "Pending assessment"
+    ),
+
+    populationDensity: asText(
+      complaint?.populationDensity,
+      "Pending assessment"
+    ),
+
+    assignedDepartment: asText(
+      complaint?.assignedDepartment,
+      "Unassigned"
+    ),
   };
 }
 
@@ -56,64 +131,104 @@ function normalizeComplaint(complaint, index) {
  * GET /api/complaints
  */
 export async function fetchComplaints(filters = {}) {
-  const { category = "All", timeframe = "30d" } = filters;
+  const {
+    category = "All",
+    timeframe = "30d",
+  } = filters;
 
   if (API_BASE_URL) {
     try {
       const query = new URLSearchParams();
-      if (category && category !== "All") query.append("category", category);
-      if (timeframe) query.append("timeframe", timeframe);
 
-      const response = await fetch(`${API_BASE_URL}/api/complaints?${query.toString()}`, {
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-        },
-      });
+      if (category && category !== "All") {
+        query.append("category", category);
+      }
+
+      if (timeframe) {
+        query.append("timeframe", timeframe);
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/complaints?${query.toString()}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+        throw new Error(
+          `HTTP error ${response.status}: ${response.statusText}`
+        );
       }
 
       const data = await response.json();
-      const complaints = Array.isArray(data) ? data : (data.complaints || data.data || []);
-      if (!Array.isArray(complaints)) throw new Error("Invalid complaints response");
-      return complaints.map(normalizeComplaint);
+
+      const complaints = Array.isArray(data)
+        ? data
+        : data?.complaints ||
+          data?.data ||
+          [];
+
+      if (!Array.isArray(complaints)) {
+        throw new Error(
+          "Invalid complaints response"
+        );
+      }
+
+      return {
+        complaints: complaints.map(
+          normalizeComplaint
+        ),
+
+        pagination:
+          data?.pagination || null,
+      };
     } catch (err) {
-      console.warn("JanSetu API service: falling back to mock dataset due to fetch failure:", err);
-      return filterMockComplaints(category, timeframe);
+      console.warn(
+        "JanSetu API service: falling back to mock dataset due to fetch failure:",
+        err
+      );
+
+      return {
+        complaints: filterMockComplaints(
+          category,
+          timeframe
+        ),
+
+        pagination: null,
+      };
     }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch complaints: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.message || "Failed to fetch complaints");
   }
 
   return {
-    complaints: Array.isArray(result.data) ? result.data : [],
-    pagination: result.pagination || null,
+    complaints: filterMockComplaints(
+      category,
+      timeframe
+    ),
+
+    pagination: null,
   };
 }
 
-function filterMockComplaints(category, timeframe) {
-  let list = [...MOCK_COMPLAINTS];
-  if (category && category !== "All") {
-    list = list.filter((item) => item.category?.toLowerCase() === category.toLowerCase());
+/**
+ * GET /api/complaints/:id
+ */
+export async function fetchComplaintById(id) {
+  if (!id) {
+    throw new Error("Complaint ID is required");
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/complaints/${id}`, {
-    headers: {
-      Accept: "application/json",
-    },
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/complaints/${id}`,
+    {
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error(
@@ -124,103 +239,183 @@ function filterMockComplaints(category, timeframe) {
   const result = await response.json();
 
   if (!result.success) {
-    throw new Error(result.message || "Failed to fetch complaint");
+    throw new Error(
+      result.message ||
+        "Failed to fetch complaint"
+    );
   }
 
-  return result.data;
+  return normalizeComplaint(
+    result.data,
+    0
+  );
+}
+
+/**
+ * Filter mock complaints.
+ *
+ * If you already have MOCK_COMPLAINTS defined in your
+ * project, keep that definition/import here.
+ */
+function filterMockComplaints(
+  category,
+  timeframe
+) {
+  // No mock dataset was included in the provided file.
+  // Return an empty array instead of crashing the build.
+  let list = [];
+
+  if (
+    category &&
+    category !== "All"
+  ) {
+    list = list.filter(
+      (item) =>
+        item.category?.toLowerCase() ===
+        category.toLowerCase()
+    );
+  }
+
+  return list;
 }
 
 /**
  * Calculate dashboard summary from real complaints.
  */
 export async function fetchSummaryMetrics() {
-  const { complaints } = await fetchComplaints({ limit: 1000 });
+  const { complaints } =
+    await fetchComplaints({
+      limit: 1000,
+    });
 
   const total = complaints.length;
 
   const resolved = complaints.filter(
     (complaint) =>
-      String(complaint.status || "").toLowerCase() === "resolved"
+      String(
+        complaint.status || ""
+      ).toLowerCase() === "resolved"
   ).length;
 
   const pending = complaints.filter(
     (complaint) =>
-      String(complaint.status || "").toLowerCase() !== "resolved"
+      String(
+        complaint.status || ""
+      ).toLowerCase() !== "resolved"
   ).length;
 
   return {
     totalReports: total,
+
     resolved,
+
     pending,
+
     resolutionRate: total
-      ? Math.round((resolved / total) * 100)
+      ? Math.round(
+          (resolved / total) * 100
+        )
       : 0,
   };
 }
 
 /**
- * Calculate category distribution from real complaints.
+ * Calculate category distribution
+ * from real complaints.
  */
 export async function fetchCategoryBreakdown() {
-  const { complaints } = await fetchComplaints({ limit: 1000 });
+  const { complaints } =
+    await fetchComplaints({
+      limit: 1000,
+    });
 
   const counts = {};
 
-  complaints.forEach((complaint) => {
-    const category = complaint.category || "Other";
-    counts[category] = (counts[category] || 0) + 1;
-  });
+  complaints.forEach(
+    (complaint) => {
+      const category =
+        complaint.category || "Other";
 
-  return Object.entries(counts).map(([name, value]) => ({
-    name,
-    value,
-  }));
+      counts[category] =
+        (counts[category] || 0) + 1;
+    }
+  );
+
+  return Object.entries(counts).map(
+    ([name, value]) => ({
+      name,
+      value,
+    })
+  );
 }
 
 /**
- * Calculate demand trend from real complaint creation dates.
+ * Calculate demand trend
+ * from complaint creation dates.
  */
 export async function fetchDemandTrends() {
-  const { complaints } = await fetchComplaints({ limit: 1000 });
+  const { complaints } =
+    await fetchComplaints({
+      limit: 1000,
+    });
 
   const counts = {};
 
-  complaints.forEach((complaint) => {
-    const dateValue =
-      complaint.createdAt ||
-      complaint.created_at ||
-      complaint.timestamp;
+  complaints.forEach(
+    (complaint) => {
+      const dateValue =
+        complaint.createdAt ||
+        complaint.created_at ||
+        complaint.timestamp;
 
-    if (!dateValue) return;
+      if (!dateValue) {
+        return;
+      }
 
-    const date = new Date(dateValue);
+      const date =
+        new Date(dateValue);
 
-    if (Number.isNaN(date.getTime())) return;
+      if (
+        Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        return;
+      }
 
-    const key = date.toISOString().slice(0, 10);
+      const key =
+        date
+          .toISOString()
+          .slice(0, 10);
 
-    counts[key] = (counts[key] || 0) + 1;
-  });
+      counts[key] =
+        (counts[key] || 0) + 1;
+    }
+  );
 
   return Object.entries(counts)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, requests]) => ({
-      date,
-      requests,
-    }));
+    .sort(
+      ([a], [b]) =>
+        a.localeCompare(b)
+    )
+    .map(
+      ([date, requests]) => ({
+        date,
+        requests,
+      })
+    );
 }
 
 /**
  * AI signals are not connected yet.
- *
- * Do not invent AI results before the AI service is integrated.
  */
 export async function fetchAISignals() {
   return [];
 }
 
 /**
- * AI/data-fusion pipeline is not connected yet.
+ * AI/data-fusion pipeline
+ * is not connected yet.
  */
 export async function fetchFusionStages() {
   return [];
@@ -231,7 +426,9 @@ export async function fetchFusionStages() {
  */
 export async function checkBackendHealth() {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/health`);
+    const response = await fetch(
+      `${API_BASE_URL}/api/health`
+    );
 
     return response.ok;
   } catch {
