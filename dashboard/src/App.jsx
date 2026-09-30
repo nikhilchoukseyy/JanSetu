@@ -58,7 +58,10 @@ function Dashboard() {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  const overviewSectionRef = useRef(null);
   const mapSectionRef = useRef(null);
+  const analyticsSectionRef = useRef(null);
+  const dataFusionSectionRef = useRef(null);
 
   // Load data on mount or when filters change
   useEffect(() => {
@@ -116,6 +119,32 @@ setFusionStages(stages);
     }
   };
 
+  const handleSidebarNavigation = (tab) => {
+    setActiveTab(tab);
+
+    const sectionMap = {
+      overview: overviewSectionRef,
+      hotspots: mapSectionRef,
+      analytics: analyticsSectionRef,
+      priorities: mapSectionRef,
+      population: dataFusionSectionRef,
+      infrastructure: analyticsSectionRef,
+    }; 
+
+    if (tab === "reports") {
+      setReportModalOpen(true);
+      return;
+    }
+
+    const sectionRef = sectionMap[tab];
+    if (sectionRef?.current) {
+      sectionRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  };
+
   const handleGenerateReport = () => {
     setReportModalOpen(true);
   };
@@ -134,7 +163,7 @@ setFusionStages(stages);
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleSidebarNavigation}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         selectedCategory={selectedCategory}
@@ -144,7 +173,7 @@ setFusionStages(stages);
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         {/* Editorial Header */}
         <Header
           onOpenSidebar={() => setSidebarOpen(true)}
@@ -156,7 +185,8 @@ setFusionStages(stages);
         {/* Dashboard Body */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl w-full mx-auto space-y-8">
           {/* MAIN HERO SECTION */}
-          <section className="relative pb-2">
+          {/* MAIN HERO SECTION */}
+          <section ref={overviewSectionRef} className="relative pb-2 scroll-mt-24">
             <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
               <div className="max-w-3xl space-y-3">
                 {/* Eyebrow with live status indicator */}
@@ -278,7 +308,7 @@ setFusionStages(stages);
           </section>
 
           {/* 4. DEMAND TREND & INFRASTRUCTURE VISUALIZATION (RECHARTS) */}
-          <section>
+          <section ref={analyticsSectionRef} className="scroll-mt-24">
             <DemandTrend
               trendData={trendData}
               categoryData={categoryData}
@@ -286,7 +316,7 @@ setFusionStages(stages);
           </section>
 
           {/* 5. INTERACTIVE DATA FUSION PIPELINE */}
-          <section>
+          <section ref={dataFusionSectionRef} className="scroll-mt-24">
             <DataFusion stages={fusionStages} />
           </section>
 

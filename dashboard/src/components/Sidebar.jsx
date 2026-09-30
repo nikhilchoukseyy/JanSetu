@@ -44,8 +44,7 @@ export default function Sidebar({
   };
 
   const sidebarContent = (
-    <div className="flex h-full flex-col justify-between bg-[#FAF7F0] border-r border-[#E6E0D2] px-4 py-5 select-none">
-      {/* Brand Header */}
+  <div className="flex h-screen flex-col justify-between overflow-y-auto bg-[#FAF7F0] border-r border-[#E6E0D2] px-4 py-5 select-none">
       <div>
         <div className="flex items-center justify-between px-2 pb-5 border-b border-[#EBE5D8]">
           <div className="flex items-center gap-3">
@@ -265,7 +264,7 @@ export default function Sidebar({
   return (
     <>
       {/* Desktop Persistent Sidebar */}
-      <aside className="hidden lg:block lg:w-64 lg:shrink-0 lg:h-screen lg:sticky lg:top-0">
+      <aside className="hidden lg:block lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:h-screen lg:z-30">
         {sidebarContent}
       </aside>
 
