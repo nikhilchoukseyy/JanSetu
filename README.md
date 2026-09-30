@@ -1,5 +1,5 @@
 
-# JanSetu — Citizen Demand Aggregation Platform
+# JanSetuLive — Citizen Demand Aggregation Platform
 
 A multilingual, multi-channel AI platform that turns scattered citizen development requests into ranked, evidence-backed infrastructure priorities for policymakers.
 
